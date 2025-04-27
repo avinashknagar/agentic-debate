@@ -109,6 +109,29 @@ class DebateLogger:
         # Add timestamp to debate data
         debate_data["timestamp"] = self.timestamp
         
+        # Format the transcript to ensure voting results are properly included
+        for round_data in debate_data["transcript"]:
+            if "voting_results" in round_data:
+                # Ensure voting results are properly formatted
+                voting = round_data["voting_results"]
+                round_data["voting_results"] = {
+                    "continue": voting["continue"],
+                    "continue_votes": voting["continue_votes"],
+                    "replace_votes": voting["replace_votes"],
+                    "evaluations": []
+                }
+                
+                # Format each judge's evaluation
+                for i, eval_data in enumerate(voting["evaluations"]):
+                    judge_evaluation = {
+                        "judge_number": i+1,
+                        "total_score": eval_data["total_score"],
+                        "vote": "CONTINUE" if eval_data["continue_vote"] else "REPLACE",
+                        "comments": eval_data["comments"],
+                        "criteria_scores": eval_data.get("position_y_performance", {})
+                    }
+                    round_data["voting_results"]["evaluations"].append(judge_evaluation)
+        
         try:
             with open(log_path, 'w') as f:
                 json.dump(debate_data, f, indent=2)

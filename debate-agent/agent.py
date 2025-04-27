@@ -63,17 +63,26 @@ Topic: {self.topic}
 
 {self.role_description}
 
-Respond with clear, concise arguments. Maintain a respectful and professional tone at all times.
+Respond with clear, concise arguments. Keep your responses brief and to the point.
+Your responses should be no more than 3-4 sentences maximum.
+Maintain a respectful and professional tone at all times.
 Focus on strong reasoning and evidence to support your position.
 Your response should be structured and directly address the topic and opponent's arguments.
 
 Remember your position and stay consistent with it throughout the debate.
 """
         return system_prompt
+
+    def _build_system_message(self):
+        """This method is not used directly - kept for backwards compatibility"""
+        return ""
     
     def _create_prompt_messages(self, message: str, conversation: List[Dict]) -> List[Any]:
         """Creates the full prompt with conversation history"""
         messages = [SystemMessage(content=self._create_system_prompt())]
+        
+        # Add brevity instruction as a separate system message for emphasis
+        messages.append(SystemMessage(content="IMPORTANT: Keep your response extremely concise. Use no more than 3-4 sentences total."))
         
         # Add summarized context from agent memory
         memory_context = self.memory.get_context_summary()
@@ -106,8 +115,12 @@ Remember your position and stay consistent with it throughout the debate.
         try:
             messages = self._create_prompt_messages(message, conversation)
             
+            # Use num_predict instead of max_tokens for Ollama
             # OllamaLLM.invoke() returns the string directly, not an object with content attribute
-            response = self.llm.invoke(messages)
+            response = self.llm.invoke(
+                messages,
+                options={"num_predict": 150}  # Limit response length to about 3-4 sentences
+            )
             
             # Update agent memory with the new information
             latest_round = {}

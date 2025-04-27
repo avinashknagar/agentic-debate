@@ -80,6 +80,9 @@ class DebateManager:
                 print("\n--- Judge Voting ---")
                 voting_results = self.collect_votes(round_num)
                 
+                # Store voting results in the round data
+                round_result["voting_results"] = voting_results
+                
                 # Log voting results
                 self.logger.log_votes(voting_results, self.current_position_y.name)
                 

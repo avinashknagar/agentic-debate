@@ -51,6 +51,22 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
         
+        .round-content {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .conversation {
+            flex: 1 1 65%;
+            min-width: 300px;
+        }
+        
+        .evaluation-section {
+            flex: 1 1 30%;
+            min-width: 250px;
+        }
+        
         .round-header {
             background-color: #3498db;
             color: white;
@@ -169,6 +185,80 @@
             .statement {
                 padding: 10px;
             }
+            
+            .round-content {
+                flex-direction: column;
+            }
+            
+            .conversation, .evaluation-section {
+                width: 100%;
+                min-width: 100%;
+            }
+        }
+
+        .evaluations {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border-left: 5px solid #9b59b6;
+        }
+        
+        .evaluation-header {
+            font-weight: bold;
+            color: #9b59b6;
+            margin-bottom: 10px;
+        }
+        
+        .evaluation {
+            background-color: white;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .judge-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        
+        .score {
+            color: #9b59b6;
+        }
+        
+        .vote {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            color: white;
+            background-color: #9b59b6;
+        }
+        
+        .criteria-scores {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .criteria {
+            background-color: #f0f0f0;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .voting-summary {
+            background-color: #e8f8f5;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border-left: 5px solid #2ecc71;
         }
     </style>
 </head>
@@ -393,6 +483,14 @@
                     roundHeader.innerHTML = `<h2>Round ${round.round}</h2>`;
                     roundElement.appendChild(roundHeader);
                     
+                    // Create a container for the round content (flex container)
+                    const roundContent = document.createElement('div');
+                    roundContent.className = 'round-content';
+                    
+                    // Create conversation section (left side)
+                    const conversationSection = document.createElement('div');
+                    conversationSection.className = 'conversation';
+                    
                     // Position X statement
                     if (round.position_x_statement) {
                         const statementX = document.createElement('div');
@@ -408,7 +506,7 @@
                         contentX.textContent = round.position_x_statement;
                         statementX.appendChild(contentX);
                         
-                        roundElement.appendChild(statementX);
+                        conversationSection.appendChild(statementX);
                     }
                     
                     // Position Y statement
@@ -426,8 +524,94 @@
                         contentY.textContent = round.position_y_statement;
                         statementY.appendChild(contentY);
                         
-                        roundElement.appendChild(statementY);
+                        conversationSection.appendChild(statementY);
                     }
+                    
+                    // Add conversation section to round content
+                    roundContent.appendChild(conversationSection);
+                    
+                    // Create evaluation section (right side)
+                    const evaluationSection = document.createElement('div');
+                    evaluationSection.className = 'evaluation-section';
+                    
+                    // Add voting results and evaluations if they exist
+                    if (round.voting_results) {
+                        const votingResults = round.voting_results;
+                        
+                        // Voting summary
+                        const votingSummary = document.createElement('div');
+                        votingSummary.className = 'voting-summary';
+                        votingSummary.innerHTML = `
+                            <strong>Voting Results:</strong> 
+                            ${votingResults.continue ? 'Continue' : 'Replace'} 
+                            (${votingResults.continue_votes} continue votes, 
+                            ${votingResults.replace_votes} replace votes)
+                        `;
+                        evaluationSection.appendChild(votingSummary);
+                        
+                        // Evaluations section
+                        if (votingResults.evaluations && votingResults.evaluations.length > 0) {
+                            const evaluationsSection = document.createElement('div');
+                            evaluationsSection.className = 'evaluations';
+                            
+                            const evaluationHeader = document.createElement('div');
+                            evaluationHeader.className = 'evaluation-header';
+                            evaluationHeader.textContent = 'Judge Evaluations';
+                            evaluationsSection.appendChild(evaluationHeader);
+                            
+                            votingResults.evaluations.forEach(eval => {
+                                const evaluation = document.createElement('div');
+                                evaluation.className = 'evaluation';
+                                
+                                // Judge header with score
+                                const judgeHeader = document.createElement('div');
+                                judgeHeader.className = 'judge-header';
+                                judgeHeader.innerHTML = `
+                                    <div>Judge ${eval.judge_number}</div>
+                                    <div class="score">Score: ${eval.total_score.toFixed(1)}/5.0</div>
+                                `;
+                                evaluation.appendChild(judgeHeader);
+                                
+                                // Vote
+                                const vote = document.createElement('div');
+                                vote.innerHTML = `Vote: <span class="vote">${eval.vote}</span>`;
+                                evaluation.appendChild(vote);
+                                
+                                // Criteria scores
+                                if (eval.criteria_scores) {
+                                    const criteriaContainer = document.createElement('div');
+                                    criteriaContainer.className = 'criteria-scores';
+                                    
+                                    for (const [criterion, score] of Object.entries(eval.criteria_scores)) {
+                                        const formatted = criterion.replace(/_/g, ' ');
+                                        const capitalized = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+                                        criteriaContainer.innerHTML += `
+                                            <span class="criteria">${capitalized}: ${score}/5</span>
+                                        `;
+                                    }
+                                    
+                                    evaluation.appendChild(criteriaContainer);
+                                }
+                                
+                                // Comments
+                                if (eval.comments) {
+                                    const comments = document.createElement('div');
+                                    comments.innerHTML = `<strong>Comments:</strong> ${eval.comments}`;
+                                    evaluation.appendChild(comments);
+                                }
+                                
+                                evaluationsSection.appendChild(evaluation);
+                            });
+                            
+                            evaluationSection.appendChild(evaluationsSection);
+                        }
+                    }
+                    
+                    // Add evaluation section to round content
+                    roundContent.appendChild(evaluationSection);
+                    
+                    // Add the round content to the round element
+                    roundElement.appendChild(roundContent);
                     
                     debateRoundsContainer.appendChild(roundElement);
                 });
