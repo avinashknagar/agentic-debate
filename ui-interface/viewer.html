@@ -498,7 +498,8 @@
                         
                         const speakerX = document.createElement('div');
                         speakerX.className = 'speaker';
-                        speakerX.innerHTML = `${data.position_x} <span class="position-badge position-x-badge">X</span>`;
+                        const speakerName = round.position_x_name || data.position_x;
+                        speakerX.innerHTML = `${speakerName} <span class="position-badge position-x-badge">X</span>`;
                         statementX.appendChild(speakerX);
                         
                         const contentX = document.createElement('div');
@@ -516,7 +517,8 @@
                         
                         const speakerY = document.createElement('div');
                         speakerY.className = 'speaker';
-                        speakerY.innerHTML = `${data.position_y_debaters[0]} <span class="position-badge position-y-badge">Y</span>`;
+                        const speakerYName = round.position_y_name || data.position_y_debaters[0];
+                        speakerY.innerHTML = `${speakerYName} <span class="position-badge position-y-badge">Y</span>`;
                         statementY.appendChild(speakerY);
                         
                         const contentY = document.createElement('div');
@@ -567,7 +569,7 @@
                                 const judgeHeader = document.createElement('div');
                                 judgeHeader.className = 'judge-header';
                                 judgeHeader.innerHTML = `
-                                    <div>Judge ${eval.judge_number}</div>
+                                    <div>Judge: ${eval.judge_name}</div>
                                     <div class="score">Score: ${eval.total_score.toFixed(1)}/5.0</div>
                                 `;
                                 evaluation.appendChild(judgeHeader);

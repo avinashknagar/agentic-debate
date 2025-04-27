@@ -2,6 +2,7 @@ import os
 import json
 from typing import Dict, List, Any, Optional
 import logging
+import sys
 
 # Setup basic logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -42,13 +43,34 @@ def load_config(config_file: Optional[str] = None) -> Dict[str, Any]:
             config = json.load(f)
         logger.info(f"Configuration loaded successfully from {config_file}")
         validate_config(config)
+        
+        # Override default response style if specified in config
+        if "debate_settings" in config and "response_style" in config["debate_settings"]:
+            response_style = config["debate_settings"]["response_style"]
+            
+            # Import here to avoid circular imports and get a fresh copy of the module
+            import importlib
+            import config as config_module
+            importlib.reload(config_module)
+            
+            # Get the available styles directly from the module
+            available_styles = list(config_module.RESPONSE_STYLES.keys())
+            
+            if response_style in available_styles:
+                # Update the DEFAULT_RESPONSE_STYLE in the module
+                config_module.DEFAULT_RESPONSE_STYLE = response_style
+                logger.info(f"Overriding default response style to: {response_style}")
+            else:
+                logger.warning(f"Invalid response_style '{response_style}'. Using default. Available styles: {available_styles}")
+        
         return config
     except json.JSONDecodeError:
         logger.error(f"Invalid JSON in config file: {config_file}")
         raise
     except Exception as e:
-        logger.error(f"Error loading config: {e}")
-        raise
+        logger.error(f"Error loading configuration: {e}")
+        logger.exception("Detailed traceback:")  # This will print the full traceback
+        raise ValueError(f"Failed to load configuration: {str(e)}")
 
 def validate_config(config: Dict[str, Any]) -> bool:
     """

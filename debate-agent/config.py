@@ -65,3 +65,30 @@ EVALUATION_TEMPLATE = {
 # Timer configuration
 DEFAULT_TIME_LIMIT_SECONDS = 300  # 5 minutes
 TOKENS_PER_SECOND = 3.75  # Based on ~150 words per minute
+
+# Response length configuration
+RESPONSE_STYLES = {
+    "concise": {
+        "description": "Keep your response extremely concise. Use no more than 3-4 sentences total.",
+        "token_limit": 150,
+        "max_chars": 500
+    },
+    "standard": {
+        "description": "Provide a clear, focused response. Use 5-7 sentences to make your points.",
+        "token_limit": 300,
+        "max_chars": 1000
+    },
+    "detailed": {
+        "description": "Develop your arguments thoroughly. Use up to 10 sentences to articulate your position.",
+        "token_limit": 500,
+        "max_chars": 2000
+    },
+    "comprehensive": {
+        "description": "Present a comprehensive argument with detailed explanations and evidence.",
+        "token_limit": 800,
+        "max_chars": 3500
+    }
+}
+
+# Default response style (can be "concise", "standard", "detailed", or "comprehensive")
+DEFAULT_RESPONSE_STYLE = "detailed"

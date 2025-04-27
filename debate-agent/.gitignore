@@ -2,3 +2,4 @@ venv*
 *pycache*
 input/
 input/*.json
+output/*.json

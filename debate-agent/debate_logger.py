@@ -122,9 +122,9 @@ class DebateLogger:
                 }
                 
                 # Format each judge's evaluation
-                for i, eval_data in enumerate(voting["evaluations"]):
+                for eval_data in voting["evaluations"]:
                     judge_evaluation = {
-                        "judge_number": i+1,
+                        "judge_name": eval_data["judge_name"], 
                         "total_score": eval_data["total_score"],
                         "vote": "CONTINUE" if eval_data["continue_vote"] else "REPLACE",
                         "comments": eval_data["comments"],

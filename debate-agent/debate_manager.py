@@ -24,7 +24,8 @@ class DebateManager:
                  topic: str,
                  rounds: int = DEFAULT_ROUNDS, 
                  starting_position: str = DEFAULT_STARTING_POSITION,
-                 verbose: bool = True):
+                 verbose: bool = True,
+                 response_style: str = None):
         if len(position_y_agents) < 4:
             raise ValueError("Need at least 4 Position Y agents")
             
@@ -38,10 +39,18 @@ class DebateManager:
         self.current_position_y = position_y_agents[0]
         self.rotation_tracking[self.current_position_y.name] = True
         self.judges = position_y_agents[1:]
+
+        
         self.timer = TimerSystem()
         self.speaking_order = [starting_position, "Y" if starting_position == "X" else "X"]
         self.debate_transcript = []
         self.logger = DebateLogger(verbose=verbose)
+        
+        # Set response style for all agents if provided
+        if response_style:
+            position_x.response_style = response_style
+            for agent in position_y_agents:
+                agent.response_style = response_style
 
     def start_debate(self) -> Dict:
         """
@@ -127,6 +136,10 @@ class DebateManager:
         round_data = {"round": round_num}
         self.timer.reset()
         
+        # Store agent names in round data
+        round_data["position_x_name"] = position_x.name
+        round_data["position_y_name"] = debating_position_y.name
+        
         # Generate debate prompts based on round number
         if round_num == 1:
             x_prompt = f"This is round 1 of our debate on '{self.topic}'. Please make your opening statement."
@@ -169,18 +182,30 @@ class DebateManager:
         votes = []
         continue_votes = 0
         replace_votes = 0
+ 
         
         for judge in self.judges:
             print(f"Judge {judge.name} is evaluating...")
             evaluation = judge.vote(self.debate_transcript, round_num)
+            
+            # Add judge name to the evaluation data
+            evaluation["judge_name"] = judge.name
+            
+            
+            # Determine continue/replace based on average score
+            # If average score is less than 4.0, consider it a vote to replace
+            continue_vote = evaluation["total_score"] >= 4.0
+            evaluation["continue_vote"] = continue_vote
+            
             votes.append(evaluation)
             
-            if evaluation["continue_vote"]:
+            if continue_vote:
                 continue_votes += 1
             else:
                 replace_votes += 1
                 
-            print(f"Judge {judge.name} votes: {'CONTINUE' if evaluation['continue_vote'] else 'REPLACE'} - Score: {evaluation['total_score']}")
+            print(f"Judge {judge.name} votes: {'CONTINUE' if continue_vote else 'REPLACE'} - Score: {evaluation['total_score']}")
+
         
         # Determine majority vote
         continue_debater = continue_votes >= len(self.judges) / 2
@@ -194,7 +219,7 @@ class DebateManager:
             "continue": continue_debater,
             "continue_votes": continue_votes,
             "replace_votes": replace_votes,
-            "evaluations": votes
+            "evaluations": votes,
         }
 
     def rotate_agents(self) -> None:

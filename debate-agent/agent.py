@@ -9,7 +9,10 @@ from langchain_ollama import OllamaLLM
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
 from memory import AgentMemory
-from config import DEFAULT_MODEL, MODEL_TEMPERATURE, MAX_TOKENS, JUDGING_CRITERIA, EVALUATION_TEMPLATE
+from config import (
+    DEFAULT_MODEL, MODEL_TEMPERATURE, MAX_TOKENS, JUDGING_CRITERIA, 
+    EVALUATION_TEMPLATE, DEFAULT_RESPONSE_STYLE, RESPONSE_STYLES
+)
 
 class Agent:
     """
@@ -20,19 +23,25 @@ class Agent:
                  role_description: str, 
                  model: str = DEFAULT_MODEL, 
                  position: str = "X", 
-                 topic: str = ""):
+                 topic: str = "",
+                 response_style: str = None):
         self.name = name
         self.role_description = role_description
         self.model = model  # This will be like "llama3:latest"
         self.position = position  # "X" or "Y"
         self.topic = topic
         self.memory = AgentMemory()
+        self.response_style = response_style or DEFAULT_RESPONSE_STYLE
         
         # Check if model exists, pull if it doesn't
         self._ensure_model_available()
         
         # Use updated OllamaLLM class with the exact model name
         self.llm = OllamaLLM(model=self.model, temperature=MODEL_TEMPERATURE)
+
+    def _get_position_desc(self, position: str) -> str:
+        """Returns a description based on the agent's position"""
+        return "advocating" if position == 'X' else "challenging"
     
     def _ensure_model_available(self):
         """Check if the model is available and pull it if needed"""
@@ -55,21 +64,28 @@ class Agent:
             print("Please ensure Ollama is installed and running.")
         except FileNotFoundError:
             print("Ollama command not found. Please ensure Ollama is installed and in your PATH.")
-        
+
     def _create_system_prompt(self) -> str:
         """Creates the system prompt for the agent based on role and topic"""
-        system_prompt = f"""You are {self.name}, representing the {self.position} position in a debate.
+        system_prompt = f"""You are {self.name}, representing the {self._get_position_desc(self.position)} position in a debate.
 Topic: {self.topic}
 
 {self.role_description}
 
+IMPORTANT INSTRUCTIONS:
+- Do NOT start your responses with phrases like "As a [your role]..." or identify yourself in any way
+- Do NOT mention that you are an AI or language model
+- Speak naturally as if you are a real person engaged in a live debate
+- Jump directly into your arguments without any self-introduction
+- Respond as the actual person you're representing, not as someone playing a role
+
 Respond with clear, concise arguments. Keep your responses brief and to the point.
-Your responses should be no more than 3-4 sentences maximum.
+{RESPONSE_STYLES[self.response_style]['description']}
 Maintain a respectful and professional tone at all times.
 Focus on strong reasoning and evidence to support your position.
 Your response should be structured and directly address the topic and opponent's arguments.
 
-Remember your position and stay consistent with it throughout the debate.
+Stay consistent with your assigned perspective throughout the debate.
 """
         return system_prompt
 
@@ -82,7 +98,7 @@ Remember your position and stay consistent with it throughout the debate.
         messages = [SystemMessage(content=self._create_system_prompt())]
         
         # Add brevity instruction as a separate system message for emphasis
-        messages.append(SystemMessage(content="IMPORTANT: Keep your response extremely concise. Use no more than 3-4 sentences total."))
+        messages.append(SystemMessage(content=f"IMPORTANT: {RESPONSE_STYLES[self.response_style]['description']}"))
         
         # Add summarized context from agent memory
         memory_context = self.memory.get_context_summary()
@@ -92,9 +108,11 @@ Remember your position and stay consistent with it throughout the debate.
         # Add conversation history
         for turn in conversation[-5:]:  # Limited context window
             if 'position_x_statement' in turn:
-                messages.append(HumanMessage(content=f"Position X: {turn['position_x_statement']}"))
+                x_speaker = turn.get('position_x_name', 'Opponent')
+                messages.append(HumanMessage(content=f"{x_speaker}: {turn['position_x_statement']}"))
             if 'position_y_statement' in turn:
-                messages.append(AIMessage(content=f"Position Y: {turn['position_y_statement']}"))
+                y_speaker = turn.get('position_y_name', 'You')
+                messages.append(AIMessage(content=f"{y_speaker}: {turn['position_y_statement']}"))
         
         # Add current message
         messages.append(HumanMessage(content=message))
@@ -115,18 +133,22 @@ Remember your position and stay consistent with it throughout the debate.
         try:
             messages = self._create_prompt_messages(message, conversation)
             
+            # Use token limit from the configured response style
+            token_limit = RESPONSE_STYLES[self.response_style]['token_limit']
+            
             # Use num_predict instead of max_tokens for Ollama
-            # OllamaLLM.invoke() returns the string directly, not an object with content attribute
             response = self.llm.invoke(
                 messages,
-                options={"num_predict": 150}  # Limit response length to about 3-4 sentences
+                options={"num_predict": token_limit}
             )
             
             # Update agent memory with the new information
             latest_round = {}
             if self.position == "X":
+                latest_round["position_x_name"] = self.name
                 latest_round["position_x_statement"] = response
             else:
+                latest_round["position_y_name"] = self.name
                 latest_round["position_y_statement"] = response
             
             self.memory.update(latest_round)
@@ -139,7 +161,7 @@ Remember your position and stay consistent with it throughout the debate.
     
     def vote(self, transcript: List[Dict], current_round: int) -> Dict:
         """
-        Evaluates a debate round and returns scoring and vote
+        Evaluates a debate round and returns scoring
         Only used by Position Y agents acting as judges
         
         Args:
@@ -147,7 +169,7 @@ Remember your position and stay consistent with it throughout the debate.
             current_round: The round number being evaluated
             
         Returns:
-            dict: Standardized evaluation with scores and vote
+            dict: Standardized evaluation with scores
         """
         if self.position != "Y":
             raise ValueError("Only Position Y agents can vote")
@@ -170,17 +192,16 @@ Remember your position and stay consistent with it throughout the debate.
             evaluation["round_number"] = current_round
             evaluation["comments"] = "Unable to complete evaluation due to technical difficulties."
             evaluation["position_y_performance"] = {k: 3 for k in JUDGING_CRITERIA.keys()}
-            evaluation["total_score"] = 3.0
-            evaluation["continue_vote"] = True
+            # No continue_vote field, this will be determined by the debate manager
             return evaluation
     
     def _create_evaluation_prompt(self, transcript: List[Dict], current_round: int) -> str:
         """Creates prompt for evaluation"""
-        prompt = f"""You are judging a debate on the topic: {self.topic}
-        
-You need to evaluate the Position Y debater's performance in round {current_round}.
+        prompt = f"""You are a debate judge evaluating round {current_round} on the topic: {self.topic}
 
-The criteria for evaluation are:
+Your task is to assess the performance of the second speaker (Challenging Position) against the first speaker (Advocating Position).
+
+EVALUATION CRITERIA:
 """
         
         # Add criteria descriptions
@@ -189,26 +210,32 @@ The criteria for evaluation are:
             for score, description in details['scoring_guide'].items():
                 prompt += f"  Score {score}: {description}\n"
         
-        prompt += "\nHere is the transcript of the current round:\n\n"
+        prompt += "\nDEBATE TRANSCRIPT (ROUND {current_round}):\n"
         
-        # Add the relevant round from the transcript
+        # Add the relevant round from the transcript with clearer speaker identification
         if current_round <= len(transcript):
             round_data = transcript[current_round - 1]
-            prompt += f"Position X: {round_data.get('position_x_statement', 'No statement')}\n\n"
-            prompt += f"Position Y: {round_data.get('position_y_statement', 'No statement')}\n\n"
+            x_name = round_data.get('position_x_name', 'Advocating Speaker')
+            y_name = round_data.get('position_y_name', 'Challenging Speaker')
+            
+            prompt += f"=== {x_name} (Advocating) ===\n{round_data.get('position_x_statement', 'No statement provided')}\n\n"
+            prompt += f"=== {y_name} (Challenging) ===\n{round_data.get('position_y_statement', 'No statement provided')}\n\n"
         
-        prompt += """Provide your evaluation in the following format:
-        
+        prompt += f"""REQUIRED EVALUATION FORMAT:
+
 Argument Strength: [score 1-5]
-Relevance: [score 1-5]
+Relevance: [score 1-5] 
 Persuasiveness: [score 1-5]
 Clarity: [score 1-5]
 
-Total Score: [weighted average]
+Comments: [Provide 2-3 sentences justifying your scores]
 
-Comments: [your justification for the scores]
-
-Continue Vote: [YES/NO] - Should this Position Y debater continue or be replaced?
+IMPORTANT INSTRUCTIONS:
+1. All scores MUST be integers between 1-5
+2. DO NOT calculate a total score
+3. Be harsh, critical and objective in your evaluation
+4. The debate continues only if Position Y (challenging side) performs poorly, so evaluate truthfully
+5. Format your response EXACTLY as shown above
 """
         
         return prompt
@@ -240,20 +267,12 @@ Continue Vote: [YES/NO] - Should this Position Y debater continue or be replaced
                         score = int(line.split(':')[1].strip()[0])
                         if 1 <= score <= 5:
                             evaluation["position_y_performance"][criterion] = score
+                        else:
+                            # Default to middle score if out of range
+                            evaluation["position_y_performance"][criterion] = 3
                     except:
-                        pass
-            
-            # Parse total score
-            if line.startswith("total score"):
-                try:
-                    score = float(line.split(':')[1].strip().split()[0])
-                    evaluation["total_score"] = score
-                except:
-                    # Calculate weighted average if not provided
-                    weights = {k: v["weight"] for k, v in JUDGING_CRITERIA.items()}
-                    scores = evaluation["position_y_performance"]
-                    weighted_sum = sum(scores[k] * weights[k] for k in weights)
-                    evaluation["total_score"] = weighted_sum
+                        # Default to middle score if parsing fails
+                        evaluation["position_y_performance"][criterion] = 3
             
             # Parse comments
             if line.startswith("comments"):
@@ -261,10 +280,20 @@ Continue Vote: [YES/NO] - Should this Position Y debater continue or be replaced
                     evaluation["comments"] = line.split(':', 1)[1].strip()
                 except:
                     pass
-            
-            # Parse continue vote
-            if line.startswith("continue vote"):
-                vote_text = line.split(':', 1)[1].strip().upper()
-                evaluation["continue_vote"] = "YES" in vote_text
+        
+        # Calculate weighted total score
+        total_score = 0.0
+        total_weight = 0.0
+        for criterion, score in evaluation["position_y_performance"].items():
+            weight = JUDGING_CRITERIA[criterion]["weight"]
+            total_score += score * weight
+            total_weight += weight
+        
+        # Normalize the score if we have weights
+        if total_weight > 0:
+            evaluation["total_score"] = round(total_score / total_weight, 2)
+        else:
+            # Fallback if no weights are defined
+            evaluation["total_score"] = sum(evaluation["position_y_performance"].values()) / len(evaluation["position_y_performance"])
         
         return evaluation
