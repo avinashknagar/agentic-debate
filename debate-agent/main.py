@@ -1,6 +1,46 @@
 from agent import Agent
 from debate_manager import DebateManager
 import argparse
+from config_loader import load_config
+import os
+import sys
+
+def create_agents_from_config(config):
+    """
+    Creates agents from configuration
+    
+    Args:
+        config: Loaded configuration dictionary
+        
+    Returns:
+        tuple: (topic, position_x_agent, position_y_agents)
+    """
+    topic = config["topic"]
+    
+    # Create Position X agent
+    position_x_config = config["position_x"]
+    position_x_agent = Agent(
+        name=position_x_config["name"],
+        role_description=position_x_config["role_description"],
+        model=position_x_config.get("model", "llama3:latest"),
+        position="X",
+        topic=topic
+    )
+    
+    # Create Position Y agents
+    position_y_agents = []
+    for pos_y_config in config["position_y"]:
+        position_y_agents.append(
+            Agent(
+                name=pos_y_config["name"],
+                role_description=pos_y_config["role_description"],
+                model=pos_y_config.get("model", "llama3:latest"),
+                position="Y",
+                topic=topic
+            )
+        )
+    
+    return topic, position_x_agent, position_y_agents
 
 def create_example_debate(topic_choice=None):
     """
@@ -99,25 +139,69 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='AI Debate Knockout Challenge')
     parser.add_argument('--topic', type=int, help='Select debate topic (1-3)')
-    parser.add_argument('--rounds', type=int, default=6, help='Number of debate rounds')
+    parser.add_argument('--rounds', type=int, help='Number of debate rounds')
     parser.add_argument('--verbose', action='store_true', help='Print full agent responses to console')
+    parser.add_argument('--config', type=str, help='Path to custom configuration file')
+    parser.add_argument('--use-config', action='store_true', help='Use configuration from input.json')
     args = parser.parse_args()
     
-    # Create debate setup
-    topic, position_x, position_y, position_x_agent, position_y_agents = create_example_debate(args.topic)
-    
-    print(f"Setting up debate on '{topic}'")
-    print(f"Position X: {position_x}")
-    print(f"Position Y: {position_y}")
+    # Determine whether to use config file or example debates
+    if args.use_config or args.config:
+        try:
+            # Load configuration
+            config = load_config(args.config)
+            
+            # Create agents from configuration
+            topic, position_x_agent, position_y_agents = create_agents_from_config(config)
+            
+            # Get debate settings from configuration
+            debate_settings = config.get("debate_settings", {})
+            rounds = args.rounds or debate_settings.get("rounds", 6)
+            verbose = args.verbose or debate_settings.get("verbose", True)
+            starting_position = debate_settings.get("starting_position", "X")
+            rotation_limit = debate_settings.get("rotation_limit", 3)
+            
+            print(f"Setting up debate on '{topic}' using configuration file")
+            print(f"Position X: {position_x_agent.name}")
+            print(f"Position Y: {position_y_agents[0].name} and others")
+        except Exception as e:
+            print(f"Error loading configuration: {e}")
+            print("Falling back to example debate setup...")
+            # Fall back to example debate
+            topic, position_x, position_y, position_x_agent, position_y_agents = create_example_debate(args.topic)
+            rounds = args.rounds or 6
+            verbose = args.verbose
+            starting_position = "X"
+            rotation_limit = 3
+            
+            print(f"Setting up debate on '{topic}'")
+            print(f"Position X: {position_x}")
+            print(f"Position Y: {position_y}")
+    else:
+        # Create debate setup from examples
+        topic, position_x, position_y, position_x_agent, position_y_agents = create_example_debate(args.topic)
+        rounds = args.rounds or 6
+        verbose = args.verbose
+        starting_position = "X"
+        rotation_limit = 3
+        
+        print(f"Setting up debate on '{topic}'")
+        print(f"Position X: {position_x}")
+        print(f"Position Y: {position_y}")
     
     # Create and start the debate manager
     debate_manager = DebateManager(
         position_x=position_x_agent,
         position_y_agents=position_y_agents,
         topic=topic,
-        rounds=args.rounds,
-        verbose=args.verbose
+        rounds=rounds,
+        starting_position=starting_position,
+        verbose=verbose
     )
+    
+    # Set rotation limit if provided in config
+    if 'rotation_limit' in locals():
+        debate_manager.rotation_limit = rotation_limit
     
     # Run the debate
     results = debate_manager.start_debate()

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Debate Viewer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        
+        .debate-header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .debate-meta {
+            background-color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .debate-meta p {
+            margin: 5px 0;
+        }
+        
+        .debate-rounds {
+            margin-top: 30px;
+        }
+        
+        .round {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .round-header {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .statement {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        
+        .position-x {
+            background-color: #e8f4fd;
+            border-left: 5px solid #3498db;
+        }
+        
+        .position-y {
+            background-color: #fdeee8;
+            border-left: 5px solid #e74c3c;
+        }
+        
+        .speaker {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .position-badge {
+            font-size: 0.8em;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 8px;
+            color: white;
+        }
+        
+        .position-x-badge {
+            background-color: #3498db;
+        }
+        
+        .position-y-badge {
+            background-color: #e74c3c;
+        }
+        
+        .content {
+            white-space: pre-line;
+        }
+        
+        .nav-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .nav-button {
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        
+        .nav-button:hover {
+            background-color: #34495e;
+        }
+
+        .file-selector {
+            margin-bottom: 20px;
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .loading {
+            display: inline-block;
+            margin-left: 10px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .debate-header {
+                padding: 15px;
+            }
+            
+            .round {
+                padding: 15px;
+            }
+            
+            .statement {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="debate-header">
+        <h1 id="debate-title">AI Debate Viewer</h1>
+    </div>
+    
+    <div class="file-selector">
+        <label for="debate-select">Select debate: </label>
+        <select id="debate-select">
+            <option value="">-- Loading debate files... --</option>
+        </select>
+        <span id="loading-indicator" class="loading"></span>
+        
+        <!-- File upload fallback, initially hidden -->
+        <div id="file-upload" style="display: none; margin-top: 15px;">
+            <p>Server access failed. Please select a file manually:</p>
+            <input type="file" id="debate-file" accept=".json">
+        </div>
+    </div>
+    
+    <div class="debate-meta">
+        <p><strong>Topic:</strong> <span id="topic"></span></p>
+        <p><strong>Position X:</strong> <span id="position-x"></span></p>
+        <p><strong>Position Y:</strong> <span id="position-y"></span></p>
+        <p><strong>Rounds:</strong> <span id="rounds"></span></p>
+        <p><strong>Rotations:</strong> <span id="rotations"></span></p>
+    </div>
+    
+    <div class="debate-rounds" id="debate-rounds">
+        <p>Please select a debate from the dropdown menu above.</p>
+    </div>
+    
+    <div class="nav-buttons">
+        <button class="nav-button" id="scroll-to-top" title="Scroll to Top">↑</button>
+        <button class="nav-button" id="scroll-to-bottom" title="Scroll to Bottom">↓</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const debateSelect = document.getElementById('debate-select');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const debateRoundsContainer = document.getElementById('debate-rounds');
+            const fileUpload = document.getElementById('file-upload');
+            const debateFile = document.getElementById('debate-file');
+            const scrollToTop = document.getElementById('scroll-to-top');
+            const scrollToBottom = document.getElementById('scroll-to-bottom');
+            const outputDir = 'debate-agent/output/';
+            
+            // Server URL - change to your actual server URL if needed
+            const serverUrl = window.location.protocol + '//' + window.location.host;
+            
+            // Load available debate files
+            loadDebateFiles();
+            
+            // Select change handler
+            debateSelect.addEventListener('change', function() {
+                const selectedFile = this.value;
+                if (selectedFile) {
+                    loadingIndicator.textContent = 'Loading...';
+                    fetchDebateFile(selectedFile)
+                        .then(data => {
+                            if (data) {
+                                renderDebate(data);
+                            }
+                            loadingIndicator.textContent = '';
+                        })
+                        .catch(err => {
+                            console.error('Error loading selected file:', err);
+                            debateRoundsContainer.innerHTML = '<p>Error loading the selected debate file.</p>';
+                            loadingIndicator.textContent = '';
+                        });
+                }
+            });
+            
+            // File input change handler for fallback
+            debateFile.addEventListener('change', function(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                loadingIndicator.textContent = 'Loading file...';
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        renderDebate(data);
+                        loadingIndicator.textContent = '';
+                    } catch (error) {
+                        console.error('Error parsing JSON:', error);
+                        debateRoundsContainer.innerHTML = '<p>Error parsing the debate file.</p>';
+                        loadingIndicator.textContent = '';
+                    }
+                };
+                reader.readAsText(file);
+            });
+            
+            // Navigation buttons
+            scrollToTop.addEventListener('click', function() {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+            
+            scrollToBottom.addEventListener('click', function() {
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            });
+            
+            // Load debate files from output directory
+            function loadDebateFiles() {
+                loadingIndicator.textContent = 'Scanning output directory...';
+                
+                fetch(serverUrl + '/list-debates')
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(files => {
+                        // Sort files by timestamp (latest to oldest)
+                        files.sort((a, b) => {
+                            // Extract timestamps from filenames
+                            const getTimestamp = filename => {
+                                const match = filename.match(/(\d{8}_\d{6})/);
+                                return match ? match[1] : '';
+                            };
+                            
+                            const timestampA = getTimestamp(a);
+                            const timestampB = getTimestamp(b);
+                            
+                            // Sort descending (latest first)
+                            return timestampB.localeCompare(timestampA);
+                        });
+                        
+                        // Clear loading option
+                        debateSelect.innerHTML = '';
+                        
+                        // Add prompt option
+                        const promptOption = document.createElement('option');
+                        promptOption.value = '';
+                        promptOption.textContent = '-- Select a debate --';
+                        debateSelect.appendChild(promptOption);
+                        
+                        // Add file options
+                        files.forEach(file => {
+                            if (file.endsWith('.json')) {
+                                const option = document.createElement('option');
+                                option.value = '/' + outputDir + file;  // Add leading slash for absolute path
+                                
+                                // Format display name
+                                let displayName = file.replace('debate_', '')
+                                                    .replace('.json', '')
+                                                    .replace(/_/g, ' ');
+                                
+                                // Format date if present
+                                const dateMatch = file.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
+                                if (dateMatch) {
+                                    const [_, year, month, day, hour, min, sec] = dateMatch;
+                                    const formattedDate = `${year}-${month}-${day} ${hour}:${min}:${sec}`;
+                                    displayName = displayName.replace(/\d{8}_\d{6}/, formattedDate);
+                                }
+                                
+                                option.textContent = displayName;
+                                debateSelect.appendChild(option);
+                            }
+                        });
+                        
+                        loadingIndicator.textContent = '';
+                        
+                        // If we have debates, select the first one
+                        if (files.length > 0 && files[0].endsWith('.json')) {
+                            debateSelect.value = '/' + outputDir + files[0];  // Add leading slash for absolute path
+                            debateSelect.dispatchEvent(new Event('change'));
+                        } else if (files.length === 0) {
+                            debateRoundsContainer.innerHTML = '<p>No debate files found in the output directory.</p>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading debate files:', error);
+                        // Show file upload fallback
+                        fileUpload.style.display = 'block';
+                        debateSelect.style.display = 'none';
+                        document.querySelector('label[for="debate-select"]').style.display = 'none';
+                        loadingIndicator.textContent = '';
+                    });
+            }
+            
+            // Fetch debate file
+            async function fetchDebateFile(url) {
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    console.error('Error fetching debate file:', error);
+                    return null;
+                }
+            }
+            
+            // Render debate content
+            function renderDebate(data) {
+                // Update meta information
+                document.getElementById('debate-title').textContent = `AI Debate: ${data.topic}`;
+                document.getElementById('topic').textContent = data.topic;
+                document.getElementById('position-x').textContent = data.position_x;
+                document.getElementById('position-y').textContent = data.position_y_debaters.join(', ');
+                document.getElementById('rounds').textContent = data.rounds;
+                document.getElementById('rotations').textContent = data.rotations;
+                
+                // Clear previous content
+                debateRoundsContainer.innerHTML = '';
+                
+                // Render rounds
+                data.transcript.forEach(round => {
+                    const roundElement = document.createElement('div');
+                    roundElement.className = 'round';
+                    
+                    const roundHeader = document.createElement('div');
+                    roundHeader.className = 'round-header';
+                    roundHeader.innerHTML = `<h2>Round ${round.round}</h2>`;
+                    roundElement.appendChild(roundHeader);
+                    
+                    // Position X statement
+                    if (round.position_x_statement) {
+                        const statementX = document.createElement('div');
+                        statementX.className = 'statement position-x';
+                        
+                        const speakerX = document.createElement('div');
+                        speakerX.className = 'speaker';
+                        speakerX.innerHTML = `${data.position_x} <span class="position-badge position-x-badge">X</span>`;
+                        statementX.appendChild(speakerX);
+                        
+                        const contentX = document.createElement('div');
+                        contentX.className = 'content';
+                        contentX.textContent = round.position_x_statement;
+                        statementX.appendChild(contentX);
+                        
+                        roundElement.appendChild(statementX);
+                    }
+                    
+                    // Position Y statement
+                    if (round.position_y_statement) {
+                        const statementY = document.createElement('div');
+                        statementY.className = 'statement position-y';
+                        
+                        const speakerY = document.createElement('div');
+                        speakerY.className = 'speaker';
+                        speakerY.innerHTML = `${data.position_y_debaters[0]} <span class="position-badge position-y-badge">Y</span>`;
+                        statementY.appendChild(speakerY);
+                        
+                        const contentY = document.createElement('div');
+                        contentY.className = 'content';
+                        contentY.textContent = round.position_y_statement;
+                        statementY.appendChild(contentY);
+                        
+                        roundElement.appendChild(statementY);
+                    }
+                    
+                    debateRoundsContainer.appendChild(roundElement);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
