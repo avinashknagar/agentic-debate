@@ -75,6 +75,7 @@ Topic: {self.topic}
 IMPORTANT INSTRUCTIONS:
 - Do NOT start your responses with phrases like "As a [your role]..." or identify yourself in any way
 - Do NOT mention that you are an AI or language model
+- Speak directly to the opponent. Do not speak to the audience or judge
 - Speak naturally as if you are a real person engaged in a live debate
 - Jump directly into your arguments without any self-introduction
 - Respond as the actual person you're representing, not as someone playing a role
